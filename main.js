@@ -86,6 +86,12 @@ function draw() {
     surface.Draw();
 }
 
+// Equations:
+//
+// x = r * cos(u)
+// y = r * sin(u)
+// z = a * e^(-n * r) * sin(omega * r + fi)
+
 function CreateSurfaceData()
 {
     let vertexList = [];
@@ -105,7 +111,18 @@ function CreateSurfaceData()
     let z = 0;
 
     // Surface of Revolution with Damping Circular Waves
-    //      TODO: Write code for calculating surface points
+    for (let r = 0; r <= b; r += 0.2) {
+        for (let uGeg = 0; uGeg < 360; uGeg += 5) {
+            u = deg2rad(uGeg);
+
+            x = r * Math.cos(u);
+            y = r * Math.sin(u);
+            z = a * Math.pow(Math.E, -n * r) * Math.sin(omega * r + fi);
+            
+            // Transform coordinates to make surface smaller
+            vertexList.push(x / 20, y / 20, z / 20);
+        }
+    }
 
     return vertexList;
 }
