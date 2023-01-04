@@ -90,10 +90,22 @@ function CreateSurfaceData()
 {
     let vertexList = [];
 
-    for (let i=0; i<360; i+=5) {
-        vertexList.push( Math.sin(deg2rad(i)), 1, Math.cos(deg2rad(i)) );
-        vertexList.push( Math.sin(deg2rad(i)), 0, Math.cos(deg2rad(i)) );
-    }
+    // Equations parameters
+    const m = 6;
+    const b = 6 * m;
+    const a = 4 * m;
+    const n = 0.1;
+    const fi = 0;
+    const omega = m * Math.PI / b;
+    let u = 0;
+
+    // Point parameters
+    let x = 0;
+    let y = 0;
+    let z = 0;
+
+    // Surface of Revolution with Damping Circular Waves
+    //      TODO: Write code for calculating surface points
 
     return vertexList;
 }
