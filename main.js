@@ -25,6 +25,7 @@ function Model(name) {
         this.count = vertices.length / 3;
     }
 
+    // Creation of buffer for transferring normals
     this.NormalBufferData = function (vertices) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
@@ -111,6 +112,11 @@ function draw() {
     surface.Draw();
 }
 
+function animate(){
+    draw()
+    window.requestAnimationFrame(animate)
+}
+
 function CreateSurfaceData() {
     let vertexList = [];
 
@@ -143,6 +149,8 @@ function CreateSurfaceData() {
 
     return vertexList;
 }
+
+//Function for normals creation
 function CreateNormalData() {
     let vertexList = [];
 
@@ -285,7 +293,7 @@ function init() {
 
     spaceball = new TrackballRotator(canvas, draw, 0);
 
-    draw();
+    window.requestAnimationFrame(animate)
 }
 
 function mat4Transpose(a, transposed) {
