@@ -99,9 +99,18 @@ function CreateSurfaceData() {
         for (let uGeg = 0; uGeg < 360; uGeg += 5) {
             u = deg2rad(uGeg);
 
-            let v = damping(r, u)
-
-            vertexList.push(v.x,v.y,v.z);
+            let v1 = damping(r, u);
+            let v2 = damping(r + 0.2, u);
+            let v3 = damping(r, u + deg2rad(5));
+            let v4 = damping(r + 0.2, u + deg2rad(5));
+            //One triangle
+            vertexList.push(v1.x, v1.y, v1.z);
+            vertexList.push(v2.x, v2.y, v2.z);
+            vertexList.push(v3.x, v3.y, v3.z);
+            //Another triangle
+            vertexList.push(v2.x, v2.y, v2.z);
+            vertexList.push(v4.x, v4.y, v4.z);
+            vertexList.push(v3.x, v3.y, v3.z);
         }
     }
 
@@ -118,7 +127,7 @@ function damping(r, u) {
     const omega = m * Math.PI / b;
 
     // Point parameters
-    let x = r * Math.cos(u);;
+    let x = r * Math.cos(u);
     let y = r * Math.sin(u);
     let z = a * Math.pow(Math.E, -n * r) * Math.sin(omega * r + fi);
 
