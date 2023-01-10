@@ -4,9 +4,9 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let point;
-let userPointCoord;
-let userRotAngle;
+let point; // variable to display a point on a surface
+let userPointCoord; // the coordinate of a point on the texture
+let userRotAngle; // texture rotation angle
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -36,7 +36,7 @@ function Model(name) {
 
         this.countText = points.length / 2;
     }
-
+    // Draw the surface
     this.Draw = function () {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
@@ -50,10 +50,37 @@ function Model(name) {
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
-
+    // Draw a point on the surface
     this.DrawPoint = function () {
-
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribVertex);
+        gl.drawArrays(gl.LINE_STRIP, 0, this.count);
     }
+}
+
+// Function to create point geometry
+function CreateSphereSurface(r = 0.1) {
+    let vertexList = [];
+    let lon = -Math.PI;
+    let lat = -Math.PI * 0.5;
+    while (lon < Math.PI) {
+        while (lat < Math.PI * 0.5) {
+            let v1 = sphereSurfaceDate(r, lon, lat);
+            vertexList.push(v1.x, v1.y, v1.z);
+            lat += 0.05;
+        }
+        lat = -Math.PI * 0.5
+        lon += 0.05;
+    }
+    return vertexList;
+}
+
+function sphereSurfaceDate(r, u, v) {
+    let x = r * Math.sin(u) * Math.cos(v);
+    let y = r * Math.sin(u) * Math.sin(v);
+    let z = r * Math.cos(u);
+    return { x: x, y: y, z: z };
 }
 
 
@@ -68,7 +95,8 @@ function ShaderProgram(name, program) {
     this.iAttribTexture = -1;
     // Location of the uniform matrix representing the combined transformation.
     this.iModelViewProjectionMatrix = -1;
-    this.iUserPoint = -1;
+    // Variables to pass to the shader
+    this.iUserPoint = -1; 
     this.irotAngle = 0;
     this.iUP = -1;
     this.iTMU = -1;
@@ -105,12 +133,21 @@ function draw() {
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
 
+    // Passing variables to the shader
     gl.uniform1i(shProgram.iTMU, 0);
     gl.enable(gl.TEXTURE_2D);
+    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]);
+    gl.uniform1f(shProgram.irotAngle, userRotAngle);
     gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]); //giving coordinates of user point
     gl.uniform1f(shProgram.irotAngle, userRotAngle);
 
     surface.Draw();
+    let translation = damping(map(userPointCoord.x, 0, 1, 0, 36),map(userPointCoord.y, 0, 1, 0, Math.PI*2))
+    gl.uniform3fv(shProgram.iUP, [translation.x, translation.y, translation.z]);
+
+    // Change the rotation angle to display a point on a surface without a texture
+    gl.uniform1f(shProgram.irotAngle, 1100);
+    point.DrawPoint();
 }
 
 function CreateSurfaceData() {
@@ -208,6 +245,7 @@ function initGL() {
     shProgram = new ShaderProgram('Basic', prog);
     shProgram.Use();
 
+    // Parameters for passing variables to the shader
     shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
     shProgram.iAttribTexture = gl.getAttribLocation(prog, "texture");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
@@ -217,10 +255,12 @@ function initGL() {
     shProgram.iTMU = gl.getUniformLocation(prog, 'tmu');
 
     
+    point = new Model('Point');
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
     LoadTexture()
     surface.TextureBufferData(CreateTextureData());
+    point.BufferData(CreateSphereSurface())
     
     gl.enable(gl.DEPTH_TEST);
 }
@@ -291,6 +331,7 @@ function init() {
     draw();
 }
 
+// Function of loading a picture as a texture for a surface
 function LoadTexture() {
     let texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -299,6 +340,8 @@ function LoadTexture() {
     
     const image = new Image();
     image.crossOrigin = 'anonymus';
+
+    // String with source of the texture
     image.src = "https://raw.githubusercontent.com/antonpasichniuk/WebGL/CGW/texture.jpg";
     image.onload = () => {
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -314,3 +357,32 @@ function LoadTexture() {
         draw();
     }
 }
+
+// Function to read user input
+// To move a point on a surface
+window.onkeydown = (e) => {
+    switch (e.keyCode) {
+        case 87:
+            userPointCoord.x -= 0.01;
+            break;
+        case 83:
+            userPointCoord.x += 0.01;
+            break;
+        case 65:
+            userPointCoord.y += 0.01;
+            break;
+        case 68:
+            userPointCoord.y -= 0.01;
+            break;
+    }
+    userPointCoord.x = Math.max(0.001, Math.min(userPointCoord.x, 0.999));
+    userPointCoord.y = Math.max(0.001, Math.min(userPointCoord.y, 0.999));
+
+    draw();
+}
+
+// Function to rotate the texture
+onmousemove = (e) => {
+    userRotAngle = map(e.clientX, 0, window.outerWidth, 0, Math.PI);
+    draw();
+};
