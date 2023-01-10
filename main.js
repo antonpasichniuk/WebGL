@@ -71,6 +71,7 @@ function ShaderProgram(name, program) {
     this.iUserPoint = -1;
     this.irotAngle = 0;
     this.iUP = -1;
+    this.iTMU = -1;
 
     this.Use = function () {
         gl.useProgram(this.prog);
@@ -103,7 +104,12 @@ function draw() {
     let modelViewProjection = m4.multiply(projection, matAccum1);
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
-    
+
+    gl.uniform1i(shProgram.iTMU, 0);
+    gl.enable(gl.TEXTURE_2D);
+    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]); //giving coordinates of user point
+    gl.uniform1f(shProgram.irotAngle, userRotAngle);
+
     surface.Draw();
 }
 
@@ -158,7 +164,7 @@ function CreateTextureData() {
             let v = map(uGeg, 0, 360, 0, 1);
             vertexList.push(u, v);
             u = map(r + 0.2, 0, b, 0, 1);
-            vertexlist.push(u, v);
+            vertexList.push(u, v);
             u = map(r, 0, b, 0, 1);
             v = map(uGeg + 5, 0, 360, 0, 1);
             vertexList.push(u, v);
@@ -208,10 +214,13 @@ function initGL() {
     shProgram.iUserPoint = gl.getUniformLocation(prog, 'userPoint');
     shProgram.irotAngle = gl.getUniformLocation(prog, 'rotA');
     shProgram.iUP = gl.getUniformLocation(prog, 'translateUP');
+    shProgram.iTMU = gl.getUniformLocation(prog, 'tmu');
 
     
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
+    LoadTexture()
+    surface.TextureBufferData(CreateTextureData());
     
     gl.enable(gl.DEPTH_TEST);
 }
@@ -253,6 +262,8 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
+    userPointCoord = { x: 0.1, y: 0.1 };
+    userRotAngle = 0.0;
     let canvas;
     try {
         canvas = document.getElementById("webglcanvas");
