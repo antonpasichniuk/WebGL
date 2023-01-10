@@ -140,6 +140,42 @@ function CreateSurfaceData() {
     return vertexList;
 }
 
+function map(val, f1, t1, f2, t2) {
+    let m;
+    m = (val - f1) * (t2 - f2) / (t1 - f1) + f2
+    return Math.min(Math.max(m, f2), t2);
+}
+
+function CreateTextureData() {
+    let vertexList = [];
+    const m = 6;
+    const b = 6 * m;
+
+    // Surface of Revolution with Damping Circular Waves
+    for (let r = 0; r <= b; r += 0.2) {
+        for (let uGeg = 0; uGeg < 360; uGeg += 5) {
+            let u = map(r, 0, b, 0, 1);
+            let v = map(uGeg, 0, 360, 0, 1);
+            vertexList.push(u, v);
+            u = map(r + 0.2, 0, b, 0, 1);
+            vertexlist.push(u, v);
+            u = map(r, 0, b, 0, 1);
+            v = map(uGeg + 5, 0, 360, 0, 1);
+            vertexList.push(u, v);
+            u = map(r + 0.2, 0, b, 0, 1);
+            v = map(uGeg, 0, 360, 0, 1);
+            vertexList.push(u, v);
+            u = map(r + 0.2, 0, b, 0, 1);
+            v = map(uGeg + 5, 0, 360, 0, 1);
+            vertexList.push(u, v);
+            u = map(r, 0, b, 0, 1);
+            v = map(uGeg + 5, 0, 360, 0, 1);
+            vertexList.push(u, v);
+        }
+    }
+    return vertexList;
+}
+
 function damping(r, u) {
     // Equations parameters
     const m = 6;
@@ -242,4 +278,28 @@ function init() {
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
+}
+
+function LoadTexture() {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    
+    const image = new Image();
+    image.crossOrigin = 'anonymus';
+    image.src = "https://raw.githubusercontent.com/antonpasichniuk/WebGL/CGW/texture.jpg";
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+
+        draw();
+    }
 }
