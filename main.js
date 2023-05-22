@@ -4,9 +4,11 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let point; // variable to display a point on a surface
-let userPointCoord; // the coordinate of a point on the texture
 let userRotAngle; // texture rotation angle
+
+let camera
+let textureORIG
+let track;
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -96,7 +98,7 @@ function ShaderProgram(name, program) {
     // Location of the uniform matrix representing the combined transformation.
     this.iModelViewProjectionMatrix = -1;
     // Variables to pass to the shader
-    this.iUserPoint = -1; 
+    this.iUserPoint = -1;
     this.irotAngle = 0;
     this.iUP = -1;
     this.iTMU = -1;
@@ -114,14 +116,15 @@ function ShaderProgram(name, program) {
 function draw() {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
+    readValues();
     /* Set the values of the projection transformation */
     let projection = m4.perspective(Math.PI / 8, 1, 8, 12);
 
     /* Get the view matrix from the SimpleRotator object.*/
     let modelView = spaceball.getViewMatrix();
+    let noRotationView = m4.identity();
 
-    let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.7);
+    let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.);
     let translateToPointZero = m4.translation(0, 0, -10);
 
     let matAccum0 = m4.multiply(rotateToPointZero, modelView);
@@ -129,25 +132,58 @@ function draw() {
 
     /* Multiply the projection matrix times the modelview matrix to give the
        combined transformation matrix, and send that to the shader program. */
-    let modelViewProjection = m4.multiply(projection, matAccum1);
+    let matAccum2 = m4.multiply(rotateToPointZero, noRotationView);
+    let matAccum3 = m4.multiply(translateToPointZero, matAccum2);
+    let modelViewProjection = m4.multiply(projection, matAccum3);
 
-    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
+    gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(m4.translation(-2, -2, 0), modelViewProjection));
+    gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, modelViewProjection);
+    //plane.Draw();
 
     // Passing variables to the shader
     gl.uniform1i(shProgram.iTMU, 0);
     gl.enable(gl.TEXTURE_2D);
-    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]);
     gl.uniform1f(shProgram.irotAngle, userRotAngle);
-    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]); //giving coordinates of user point
     gl.uniform1f(shProgram.irotAngle, userRotAngle);
+    camera.ApplyLeftFrustum();
 
+    gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(modelViewProjection, camera.mLeftModelViewMatrix));
+
+    projection = camera.mLeftProjectionMatrix;
+    gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, m4.multiply(projection, matAccum1));
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.bindTexture(gl.TEXTURE_2D, textureORIG);
+    gl.colorMask(true, false, false, false);
     surface.Draw();
-    let translation = damping(map(userPointCoord.x, 0, 1, 0, 36),map(userPointCoord.y, 0, 1, 0, Math.PI*2))
-    gl.uniform3fv(shProgram.iUP, [translation.x, translation.y, translation.z]);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    camera.ApplyRightFrustum();
+    gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(modelViewProjection, camera.mRightModelViewMatrix));
 
-    // Change the rotation angle to display a point on a surface without a texture
-    gl.uniform1f(shProgram.irotAngle, 1100);
-    point.DrawPoint();
+    projection = camera.mRightProjectionMatrix;
+    gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, m4.multiply(projection, matAccum1));
+    gl.colorMask(false, true, true, false);
+    surface.Draw();
+
+    gl.colorMask(true, true, true, true);
+}
+
+function requestNewFrame() {
+    draw();
+    window.requestAnimationFrame(requestNewFrame)
+}
+
+function readValues() {
+    let eyeSeparation = document.getElementById("eyeSeparation").value;
+    camera.mEyeSeparation = eyeSeparation;
+
+    let fieldOfView = document.getElementById("fieldOfView").value;
+    camera.mFOV = fieldOfView;
+
+    let nearClippingDistance = document.getElementById("nearClippingDistance").value;
+    camera.mNearClippingDistance = parseFloat(nearClippingDistance);
+
+    let convergence = document.getElementById("convergenceDistance").value;
+    camera.mConvergence = convergence;
 }
 
 function CreateSurfaceData() {
@@ -172,7 +208,7 @@ function CreateSurfaceData() {
             vertexList.push(v1.x, v1.y, v1.z);
             vertexList.push(v2.x, v2.y, v2.z);
             vertexList.push(v3.x, v3.y, v3.z);
-            
+
             //Another triangle
             vertexList.push(v2.x, v2.y, v2.z);
             vertexList.push(v4.x, v4.y, v4.z);
@@ -248,20 +284,18 @@ function initGL() {
     // Parameters for passing variables to the shader
     shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
     shProgram.iAttribTexture = gl.getAttribLocation(prog, "texture");
-    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+    shProgram.iModelViewMatrix = gl.getUniformLocation(prog, "ModelViewMatrix");
+    shProgram.iProjectionMatrix = gl.getUniformLocation(prog, "ProjectionMatrix");
     shProgram.iUserPoint = gl.getUniformLocation(prog, 'userPoint');
     shProgram.irotAngle = gl.getUniformLocation(prog, 'rotA');
     shProgram.iUP = gl.getUniformLocation(prog, 'translateUP');
     shProgram.iTMU = gl.getUniformLocation(prog, 'tmu');
 
-    
-    point = new Model('Point');
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
     LoadTexture()
     surface.TextureBufferData(CreateTextureData());
-    point.BufferData(CreateSphereSurface())
-    
+
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -302,9 +336,11 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
-    userPointCoord = { x: 0.1, y: 0.1 };
     userRotAngle = 0.0;
+
     let canvas;
+    camera = new StereoCamera(50, 0.2, 1, Math.PI / 8, 8, 20);
+
     try {
         canvas = document.getElementById("webglcanvas");
         gl = canvas.getContext("webgl");
@@ -329,22 +365,23 @@ function init() {
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
+    requestNewFrame();
 }
 
 // Function of loading a picture as a texture for a surface
 function LoadTexture() {
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    textureORIG = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureORIG);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    
+
     const image = new Image();
     image.crossOrigin = 'anonymus';
 
     // String with source of the texture
     image.src = "https://raw.githubusercontent.com/antonpasichniuk/WebGL/CGW/texture.jpg";
     image.onload = () => {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.bindTexture(gl.TEXTURE_2D, textureORIG);
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -358,31 +395,84 @@ function LoadTexture() {
     }
 }
 
-// Function to read user input
-// To move a point on a surface
-window.onkeydown = (e) => {
-    switch (e.keyCode) {
-        case 87:
-            userPointCoord.x -= 0.01;
-            break;
-        case 83:
-            userPointCoord.x += 0.01;
-            break;
-        case 65:
-            userPointCoord.y += 0.01;
-            break;
-        case 68:
-            userPointCoord.y -= 0.01;
-            break;
-    }
-    userPointCoord.x = Math.max(0.001, Math.min(userPointCoord.x, 0.999));
-    userPointCoord.y = Math.max(0.001, Math.min(userPointCoord.y, 0.999));
+function StereoCamera(
+    Convergence,
+    EyeSeparation,
+    AspectRatio,
+    FOV,
+    NearClippingDistance,
+    FarClippingDistance
+) {
+    this.mConvergence = Convergence;
+    this.mEyeSeparation = EyeSeparation;
+    this.mAspectRatio = AspectRatio;
+    this.mFOV = FOV;
+    this.mNearClippingDistance = NearClippingDistance;
+    this.mFarClippingDistance = FarClippingDistance;
 
-    draw();
+    this.mLeftProjectionMatrix = null;
+    this.mRightProjectionMatrix = null;
+
+    this.mLeftModelViewMatrix = null;
+    this.mRightModelViewMatrix = null;
+
+    this.ApplyLeftFrustum = function () {
+        let top, bottom, left, right;
+        top = this.mNearClippingDistance * Math.tan(this.mFOV / 2);
+        bottom = -top;
+
+        let a = this.mAspectRatio * Math.tan(this.mFOV / 2) * this.mConvergence;
+        let b = a - this.mEyeSeparation / 2;
+        let c = a + this.mEyeSeparation / 2;
+
+        left = (-b * this.mNearClippingDistance) / this.mConvergence;
+        right = (c * this.mNearClippingDistance) / this.mConvergence;
+
+        // Set the Projection Matrix
+        this.mLeftProjectionMatrix = m4.frustum(
+            left,
+            right,
+            bottom,
+            top,
+            this.mNearClippingDistance,
+            this.mFarClippingDistance
+        );
+
+        // Displace the world to right
+        this.mLeftModelViewMatrix = m4.translation(
+            this.mEyeSeparation / 2,
+            0.0,
+            0.0
+        );
+    };
+
+    this.ApplyRightFrustum = function () {
+        let top, bottom, left, right;
+        top = this.mNearClippingDistance * Math.tan(this.mFOV / 2);
+        bottom = -top;
+
+        let a = this.mAspectRatio * Math.tan(this.mFOV / 2) * this.mConvergence;
+        let b = a - this.mEyeSeparation / 2;
+        let c = a + this.mEyeSeparation / 2;
+
+        left = (-c * this.mNearClippingDistance) / this.mConvergence;
+        right = (b * this.mNearClippingDistance) / this.mConvergence;
+
+        // Set the Projection Matrix
+        this.mRightProjectionMatrix = m4.frustum(
+            left,
+            right,
+            bottom,
+            top,
+            this.mNearClippingDistance,
+            this.mFarClippingDistance
+        );
+
+        // Displace the world to left
+        this.mRightModelViewMatrix = m4.translation(
+            -this.mEyeSeparation / 2,
+            0.0,
+            0.0
+        );
+    };
 }
-
-// Function to rotate the texture
-onmousemove = (e) => {
-    userRotAngle = map(e.clientX, 0, window.outerWidth, 0, Math.PI);
-    draw();
-};

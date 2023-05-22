@@ -4,7 +4,8 @@
 const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec2 texture;
-uniform mat4 ModelViewProjectionMatrix;
+uniform mat4 ModelViewMatrix;
+uniform mat4 ProjectionMatrix;
 
 varying vec2 v_texcoord;
 
@@ -62,24 +63,9 @@ mat4 rotation(float angleInRadians) {
 }
 
 void main() {
-    // Create the necessary matrices
-    mat4 rotMatrix = rotation(rotA);
-    mat4 transMatrix1 = translation(userPoint.x,userPoint.y,0.0);
-    mat4 transMatrix2 = translation(-userPoint.x,-userPoint.y,0.0);
-    // Move the texture
-    vec4 texture1 = vec4(texture,0.0,0.0)*transMatrix1;
-    // Rotate the texture
-    vec4 textureRotated = texture1*rotMatrix;
-    // Move the texture back
-    vec4 texture2 = textureRotated*transMatrix2;
-    v_texcoord = vec2(texture2.x,texture2.y);
-    vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
-    gl_Position = vertPos4;
-    // If it is a point on the surface, then we move it to the required position
-    if(rotA>1000.0){
-        vec4 translatePoint = translation(translateUP.x,translateUP.y,translateUP.z)*vec4(vertex,1.0);
-        gl_Position = ModelViewProjectionMatrix*translatePoint;
-    }
+    v_texcoord = texture;
+    vec4 vertPos4 = ModelViewMatrix * vec4(vertex, 1.0);
+    gl_Position = ProjectionMatrix*vertPos4;
 }`;
 
 
