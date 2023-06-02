@@ -85,8 +85,4 @@ void main() {
     // Apply texture
     vec4 texColor = texture2D(tmu, v_texcoord);
     gl_FragColor = texColor;
-    // If it is a point on the surface, we do not apply the texture
-    if(rotA>1000.0){
-        gl_FragColor = vec4(0.,0.,0.,0.);
-    }
 }`;

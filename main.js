@@ -4,11 +4,10 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let userRotAngle; // texture rotation angle
+let plane; // variable to display a plane on the background
 
-let camera
-let textureORIG
-let track;
+let camera;
+let textureVID, textureORIG, video, track;
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -127,7 +126,7 @@ function draw() {
     let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.);
     let translateToPointZero = m4.translation(0, 0, -10);
 
-    let matAccum0 = m4.multiply(rotateToPointZero, modelView);
+    let matAccum0 = m4.multiply(m4.multiply(rotateToPointZero, m4.axisRotation([0,1,0], angle)), modelView);
     let matAccum1 = m4.multiply(translateToPointZero, matAccum0);
 
     /* Multiply the projection matrix times the modelview matrix to give the
@@ -136,15 +135,15 @@ function draw() {
     let matAccum3 = m4.multiply(translateToPointZero, matAccum2);
     let modelViewProjection = m4.multiply(projection, matAccum3);
 
+    gl.bindTexture(gl.TEXTURE_2D, textureVID);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
     gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(m4.translation(-2, -2, 0), modelViewProjection));
     gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, modelViewProjection);
-    //plane.Draw();
+    plane.Draw();
 
     // Passing variables to the shader
     gl.uniform1i(shProgram.iTMU, 0);
     gl.enable(gl.TEXTURE_2D);
-    gl.uniform1f(shProgram.irotAngle, userRotAngle);
-    gl.uniform1f(shProgram.irotAngle, userRotAngle);
     camera.ApplyLeftFrustum();
 
     gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(modelViewProjection, camera.mLeftModelViewMatrix));
@@ -169,7 +168,7 @@ function draw() {
 
 function requestNewFrame() {
     draw();
-    window.requestAnimationFrame(requestNewFrame)
+    window.requestAnimationFrame(requestNewFrame);
 }
 
 function readValues() {
@@ -276,6 +275,11 @@ function damping(r, u) {
 
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
+    video = document.createElement('video');
+    video.setAttribute('autoplay', true);
+    window.vid = video;
+    getWebcam();
+    CreateWebCamTexture();
     let prog = createProgram(gl, vertexShaderSource, fragmentShaderSource);
 
     shProgram = new ShaderProgram('Basic', prog);
@@ -295,6 +299,10 @@ function initGL() {
     surface.BufferData(CreateSurfaceData());
     LoadTexture()
     surface.TextureBufferData(CreateTextureData());
+    plane = new Model('Plane');
+    let planeSize = 8.0;
+    plane.BufferData([0.0, 0.0, 0.0, planeSize, 0.0, 0.0, planeSize, planeSize, 0.0, planeSize, planeSize, 0.0, 0.0, planeSize, 0.0, 0.0, 0.0, 0.0]);
+    plane.TextureBufferData([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0]);
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -336,8 +344,6 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
-    userRotAngle = 0.0;
-
     let canvas;
     camera = new StereoCamera(50, 0.2, 1, Math.PI / 8, 8, 20);
 
@@ -393,6 +399,24 @@ function LoadTexture() {
 
         draw();
     }
+}
+
+function getWebcam() {
+    navigator.getUserMedia({ video: true, audio: false }, function (stream) {
+        video.srcObject = stream;
+        track = stream.getTracks()[0];
+    }, function (e) {
+        console.error('Rejected', e);
+    });
+}
+
+function CreateWebCamTexture() {
+    textureVID = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureVID);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
 function StereoCamera(
@@ -476,3 +500,16 @@ function StereoCamera(
         );
     };
 }
+
+let angle = 0
+
+function onRead() {
+    angle = Math.atan2(magSensor.y, magSensor.x)
+    if (angle < 0){
+        angle += Math.PI * 2;
+    }
+}
+
+let magSensor = new Magnetometer();
+magSensor.addEventListener("reading", onRead);
+magSensor.start();
