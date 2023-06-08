@@ -4,7 +4,10 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let point; // variable to display a point on a surface
 let plane; // variable to display a plane on the background
+let userPointCoord; // the coordinate of a point on the texture
+let userRotAngle; // texture rotation angle
 
 let camera;
 let textureVID, textureORIG, video, track;
@@ -126,8 +129,9 @@ function draw() {
     let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.);
     let translateToPointZero = m4.translation(0, 0, -10);
 
-    let matAccum0 = m4.multiply(m4.multiply(rotateToPointZero, m4.axisRotation([0,1,0], angle)), modelView);
+    let matAccum0 = m4.multiply(rotateToPointZero, modelView);
     let matAccum1 = m4.multiply(translateToPointZero, matAccum0);
+
 
     /* Multiply the projection matrix times the modelview matrix to give the
        combined transformation matrix, and send that to the shader program. */
@@ -139,11 +143,16 @@ function draw() {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
     gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(m4.translation(-2, -2, 0), modelViewProjection));
     gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, modelViewProjection);
+    gl.uniform1f(shProgram.irotAngle, userRotAngle);
     plane.Draw();
 
     // Passing variables to the shader
     gl.uniform1i(shProgram.iTMU, 0);
     gl.enable(gl.TEXTURE_2D);
+    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]);
+    gl.uniform1f(shProgram.irotAngle, userRotAngle);
+    gl.uniform2fv(shProgram.iUserPoint, [userPointCoord.x, userPointCoord.y]); //giving coordinates of user point
+    gl.uniform1f(shProgram.irotAngle, userRotAngle);
     camera.ApplyLeftFrustum();
 
     gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, m4.multiply(modelViewProjection, camera.mLeftModelViewMatrix));
@@ -162,7 +171,17 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iProjectionMatrix, false, m4.multiply(projection, matAccum1));
     gl.colorMask(false, true, true, false);
     surface.Draw();
+    gl.clear(gl.DEPTH_BUFFER_BIT);
 
+    let translation = rotateVector(0, 0, angle);
+    gl.uniform3fv(shProgram.iUP, [translation[0], translation[1], translation[2]]);
+    if (panner) {
+        panner.setPosition(translation[0], translation[1], translation[2]);
+    }
+
+    // Change the rotation angle to display a point on a surface without a texture
+    gl.uniform1f(shProgram.irotAngle, 1100);
+    point.DrawPoint();
     gl.colorMask(true, true, true, true);
 }
 
@@ -295,10 +314,12 @@ function initGL() {
     shProgram.iUP = gl.getUniformLocation(prog, 'translateUP');
     shProgram.iTMU = gl.getUniformLocation(prog, 'tmu');
 
+    point = new Model('Point');
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
     LoadTexture()
     surface.TextureBufferData(CreateTextureData());
+    point.BufferData(CreateSphereSurface())
     plane = new Model('Plane');
     let planeSize = 8.0;
     plane.BufferData([0.0, 0.0, 0.0, planeSize, 0.0, 0.0, planeSize, planeSize, 0.0, planeSize, planeSize, 0.0, 0.0, planeSize, 0.0, 0.0, 0.0, 0.0]);
@@ -344,6 +365,8 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
+    userPointCoord = { x: 0.1, y: 0.1 };
+    userRotAngle = 0.0;
     let canvas;
     camera = new StereoCamera(50, 0.2, 1, Math.PI / 8, 8, 20);
 
@@ -368,6 +391,7 @@ function init() {
         return;
     }
 
+    startAudio();
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
@@ -501,7 +525,7 @@ function StereoCamera(
     };
 }
 
-let angle = 0
+let angle = 0;
 
 function onRead() {
     angle = Math.atan2(magSensor.y, magSensor.x)
@@ -513,3 +537,108 @@ function onRead() {
 let magSensor = new Magnetometer();
 magSensor.addEventListener("reading", onRead);
 magSensor.start();
+
+let audio = null;
+let audioContext;
+let source;
+let panner;
+let filter;
+
+function AudioSetup() {
+    audio = document.getElementById('audio');
+
+    audio.addEventListener('play', () => {
+        console.log('play');
+        if (!audioContext) {
+            audioContext = new AudioContext();
+            source = audioContext.createMediaElementSource(audio);
+            panner = audioContext.createPanner();
+            filter = audioContext.createBiquadFilter();
+
+            // Connect audio nodes
+            source.connect(panner);
+            panner.connect(filter);
+            filter.connect(audioContext.destination);
+
+            // highshelf filter parameters
+            filter.type = 'lowshelf';
+            filter.Q.value = 2;
+            filter.frequency.value = 1000;
+            filter.gain.value = 13;
+            audioContext.resume();
+        }
+    })
+
+
+    audio.addEventListener('pause', () => {
+        console.log('pause');
+        audioContext.resume();
+    });
+}
+
+function startAudio() {
+    AudioSetup();
+
+    let filterCheckbox = document.getElementById('filterCheckbox');
+    filterCheckbox.addEventListener('change', function () {
+        if (filterCheckbox.checked) {
+            // Connect filter when checkbox is checked
+            panner.disconnect();
+            panner.connect(filter);
+            filter.connect(audioContext.destination);
+        } else {
+            // Disconnect filter when checkbox is unchecked
+            panner.disconnect();
+            panner.connect(audioContext.destination);
+        }
+    });
+
+    audio.play();
+}
+
+function rotateVector(alpha, beta, gamma) {
+    const alphaRad = alpha;
+    const betaRad = beta;
+    const gammaRad = gamma;
+
+    // Define the initial vector along the x-axis
+    let vector = [0, 1, 0];
+
+    // Rotation around the z-axis (gamma)
+    const rotZ = [
+        [Math.cos(gammaRad), -Math.sin(gammaRad), 0],
+        [Math.sin(gammaRad), Math.cos(gammaRad), 0],
+        [0, 0, 1]
+    ];
+    vector = multiplyMatrixVector(rotZ, vector);
+
+    // Rotation around the y-axis (beta)
+    const rotY = [
+        [Math.cos(betaRad), 0, Math.sin(betaRad)],
+        [0, 1, 0],
+        [-Math.sin(betaRad), 0, Math.cos(betaRad)]
+    ];
+    vector = multiplyMatrixVector(rotY, vector);
+
+    // Rotation around the x-axis (alpha)
+    const rotX = [
+        [1, 0, 0],
+        [0, Math.cos(alphaRad), -Math.sin(alphaRad)],
+        [0, Math.sin(alphaRad), Math.cos(alphaRad)]
+    ];
+    vector = multiplyMatrixVector(rotX, vector);
+
+    return vector;
+}
+
+function multiplyMatrixVector(matrix, vector) {
+    const result = [];
+    for (let i = 0; i < matrix.length; i++) {
+        let sum = 0;
+        for (let j = 0; j < vector.length; j++) {
+            sum += matrix[i][j] * vector[j];
+        }
+        result.push(sum);
+    }
+    return result;
+}

@@ -66,6 +66,10 @@ void main() {
     v_texcoord = texture;
     vec4 vertPos4 = ModelViewMatrix * vec4(vertex, 1.0);
     gl_Position = ProjectionMatrix*vertPos4;
+    if (rotA > 1000.0){
+        vec4 translatePoint = translation(translateUP.x,translateUP.y,translateUP.z)*vertPos4;
+        gl_Position = ProjectionMatrix*translatePoint;
+    }
 }`;
 
 
@@ -85,4 +89,7 @@ void main() {
     // Apply texture
     vec4 texColor = texture2D(tmu, v_texcoord);
     gl_FragColor = texColor;
+    if (rotA > 1000.0){
+      gl_FragColor = vec4(0.0,1.0,0.0,1.0);
+    }
 }`;
